@@ -1,0 +1,7 @@
+classifier:
+  name: LDPNet
+  kwargs:
+    feat_dim: 512
+    lambda1: 1.0
+    lambda2: 0.15
+    m: 0.998

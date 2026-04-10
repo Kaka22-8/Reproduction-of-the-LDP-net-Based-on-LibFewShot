@@ -1,0 +1,6 @@
+backbone:
+  name: resnet10
+  kwargs:
+    list_of_out_dims: [64, 128, 256, 512]
+    list_of_stride: [1, 2, 2, 2]
+    list_of_dilated_rate: [1, 1, 1, 1]

@@ -1,0 +1,53 @@
+includes:
+  - headers/data.yaml
+  - headers/device.yaml
+  - headers/misc.yaml
+  - headers/model.yaml
+  - headers/optimizer.yaml
+  - classifiers/LDPNet.yaml
+  - backbones/resnet10.yaml
+
+device_ids: 0
+n_gpu: 1
+
+data_root: D:/datasets/miniImageNet--ravi
+image_size: 224
+use_memory: False
+augment: True
+augment_times: 1
+augment_times_query: 1
+workers: 4
+dataloader_num: 1
+
+way_num: 5
+shot_num: 5
+query_num: 15
+episode_size: 1
+train_episode: 100
+test_episode: 100
+
+test_way: ~
+test_shot: ~
+test_query: ~
+
+epoch: 100
+test_epoch: 5
+val_per_epoch: 1
+batch_size: 128
+
+pretrain_path: ./pretrain/399_state.pth
+resume: False
+
+backbone:
+  name: resnet10
+  kwargs:
+    list_of_out_dims: [64, 128, 256, 512]
+    list_of_stride: [1, 2, 2, 2]
+    list_of_dilated_rate: [1, 1, 1, 1]
+
+optimizer:
+  name: Adam
+  kwargs:
+    lr: 0.001
+
+

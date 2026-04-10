@@ -9,14 +9,23 @@ from core.config import Config
 from core import Test
 
 
-PATH = "./results/DN4-miniImageNet--ravi-Conv64F-5-1-Dec-01-2021-06-05-20"
+PATH = "./results/LDPNet-miniImageNet--ravi-resnet10-5-5-Apr-09-2026-19-44-55"
 VAR_DICT = {
-    "test_epoch": 5,
-    "device_ids": "4,5",
-    "n_gpu": 2,
+    "data_root": "D:\datasets\StanfordCar",
+    "image_size": 224,
+    "augment": False,
+    "augment_times": 1,
+    "augment_times_query": 1,
+    "test_way": 5,
+    "test_shot": 1,
+    "test_query": 15,
     "test_episode": 600,
-    "episode_size": 2,
+    "episode_size": 1,
+    "test_epoch": 5,
+    "device_ids": "0",
+    "n_gpu": 1,
 }
+
 
 
 def main(rank, config):

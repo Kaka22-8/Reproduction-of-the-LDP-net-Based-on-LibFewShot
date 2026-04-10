@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from .collate_functions import GeneralCollateFunction, FewShotAugCollateFunction
+from .collate_functions import GeneralCollateFunction, FewShotAugCollateFunction, LDPFewShotCollateFunction
 from .contrib import get_augment_method,get_mean_std
 from ...utils import ModelType
 
@@ -23,8 +23,16 @@ def get_collate_function(config, trfms, mode, model_type):
         model_type != ModelType.ABSTRACT
     ), "model_type should not be ModelType.ABSTRACT"
 
+    classifier_name = config.get("classifier", {}).get("name","")
+
     if mode == "train" and model_type == ModelType.FINETUNING:
         collate_function = GeneralCollateFunction(trfms, config["augment_times"])
+    elif mode == "train" and model_type == ModelType.METRIC and classifier_name == "LDPNet":
+        collate_function = LDPFewShotCollateFunction(
+            config["way_num"],
+            config["shot_num"],
+            config["query_num"],
+        )
     else:
         collate_function = FewShotAugCollateFunction(
             trfms,

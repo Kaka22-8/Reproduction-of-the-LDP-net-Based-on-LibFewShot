@@ -48,7 +48,7 @@ def get_dataloader(config, mode, model_type, distribute):
     classifier_name = config.get("classifier", {}).get("name", "")
     use_fgfl = "GAIN" in classifier_name.upper()
     # Check if FGFL mode is enabled
-    print("use_fgfl:", use_fgfl)
+    # print("use_fgfl:", {use_fgfl})
 
     if use_fgfl:
         # For FGFL, we need frequency domain processing in dataset

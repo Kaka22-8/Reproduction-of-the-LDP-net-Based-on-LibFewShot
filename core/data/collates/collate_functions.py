@@ -1,8 +1,57 @@
 # -*- coding: utf-8 -*-
 import itertools
 from collections import Iterable
+import random
 
+import numpy as np
+import torchvision.transforms as transforms
+from PIL import ImageEnhance, ImageFilter
 import torch
+
+
+# Helpers below are used by the official LDP-Net training collate.
+identity = lambda x: x
+
+transformtypedict={
+    "Brightness": ImageEnhance.Brightness,
+    "Contrast": ImageEnhance.Contrast,
+    "Sharpness": ImageEnhance.Sharpness,
+    "Color": ImageEnhance.Color,
+}
+
+class ImageJitter(object):
+    def __init__(self, transformdict):
+        self.transforms =[(transformtypedict[k],transformdict[k]) for k in transformdict]
+
+    def __call__(self, img):
+        out = img
+        randtensor = torch.rand(len(self.transforms))
+        for i, (transformer,alpha) in enumerate(self.transforms):
+            r = alpha * (randtensor[i]*2.0-1.0)+1
+            out = transformer(out).enhance(r).convert('RGB')
+        return out
+
+class PILRandomGaussianBlur(object):
+    def __init__(self, p=0.5, radius_min=0.1, radius_max=2.0):
+        self.prob = p
+        self.radius_min = radius_min
+        self.radius_max = radius_max
+
+    def __call__(self, img):
+        do_it = np.random.rand() <= self.prob
+        if not do_it:
+            return img
+
+        return img.filter(
+            ImageFilter.GaussianBlur(radius=random.uniform(self.radius_min, self.radius_max))
+        )
+
+
+def get_color_distortion(s=0.5):
+    color_jitter = transforms.ColorJitter(0.8 * s, 0.8 * s, 0.8 * s, 0.2 * s)
+    rnd_color_jitter = transforms.RandomApply([color_jitter], p=0.8)
+    rnd_gray = transforms.RandomGrayscale(p=0.2)
+    return transforms.Compose([rnd_color_jitter, rnd_gray])
 
 
 class GeneralCollateFunction(object):
@@ -176,6 +225,83 @@ class FewShotAugCollateFunction(object):
                 "Error, probably because the transforms are passed to the dataset, the transforms should be "
                 "passed to the collate_fn"
             )
+
+    def __call__(self, batch):
+        return self.method(batch)
+
+class LDPFewShotCollateFunction(object):
+    """
+    LDP-Net official-style episodic training collate.
+
+    Output:
+    - batch_views: dict
+        - "local_views": list of 6 tensors, each [E, W, S+Q, C, 96, 96]
+        - "raw_images": tensor [E, W, S+Q, C, 224, 224]
+    - global_labels: tensor [E, W, S+Q]
+    """
+    def __init__(self, way_num, shot_num, query_num):
+        super(LDPFewShotCollateFunction, self).__init__()
+        self.way_num = way_num
+        self.shot_num = shot_num
+        self.query_num = query_num
+
+        mean=[0.485, 0.456, 0.406]
+        std=[0.229, 0.224, 0.225]
+
+        color_transform = [get_color_distortion(),PILRandomGaussianBlur()]
+
+        self.local_transforms = [
+            transforms.Compose(
+                [
+                    transforms.RandomResizedCrop(96,scale=(0.05,0.14)),
+                    transforms.RandomHorizontalFlip(p=0.5),
+                    transforms.Compose(color_transform),
+                    transforms.ToTensor(),
+                    transforms.Normalize(mean=mean, std=std),
+                ]
+            )
+            for _ in range(6)
+        ]
+
+        self.raw_transforms = transforms.Compose(
+            [
+                transforms.Resize((224, 224)),
+                ImageJitter(dict(Brightness=0.4, Contrast=0.4,Color=0.4)),
+                transforms.RandomHorizontalFlip(),
+                transforms.ToTensor(),
+                transforms.Normalize(mean=mean, std=std),
+            ]
+        )
+
+    def method(self, batch):
+        images, labels = zip(*batch)
+
+        episode_size = len(images) // (self.way_num * (self.shot_num + self.query_num))
+
+        images = list(images)
+        labels = torch.tensor(labels, dtype=torch.int64).reshape(
+            episode_size, self.way_num, self.shot_num + self.query_num
+        )
+
+        local_views = []
+        for trans in self.local_transforms:
+            view = [trans(img) for img in images]
+            view =torch.stack(view).view(
+                episode_size, self.way_num, self.shot_num + self.query_num,3,96,96
+            )
+            local_views.append(view)
+
+        raw_images = [self.raw_transforms(img) for img in images]
+        raw_images = torch.stack(raw_images).view(
+            episode_size, self.way_num, self.shot_num + self.query_num,3,224,224
+        )
+
+        batch_views = {
+            "local_views": local_views,
+            "raw_images": raw_images,
+        }
+
+        return batch_views,labels
 
     def __call__(self, batch):
         return self.method(batch)

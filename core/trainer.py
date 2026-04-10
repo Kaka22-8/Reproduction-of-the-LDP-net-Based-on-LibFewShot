@@ -194,6 +194,12 @@ class Trainer(object):
             #     if (param.grad != param.grad).float().sum() != 0:  # nan detected
             #         param.grad.zero_()
             self.optimizer.step()
+
+            # LDP-Net updates the EMA local branch after optimizer.step()
+            if self.config["classifier"]["name"] == "LDPNet":
+                model_ref = self.model.module if self.distribute else self.model
+                model_ref.update_local_branch()
+
             meter.update("calc_time", time() - calc_begin)
 
             # measure accuracy and record loss
