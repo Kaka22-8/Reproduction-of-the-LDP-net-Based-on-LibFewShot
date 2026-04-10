@@ -174,10 +174,13 @@ class LDPNet(MetricModel):
 
                 teacher_prob_4d = teacher_prob.view(way_num, self.query_num, way_num)
 
-                self_image_loss = self_image_loss + F.kl_div(
-                    global_log_prob,
-                    teacher_prob,
-                    reduction="batchmean",
+                global_prob = F.softmax(output, dim=-1)
+
+                self_image_loss = self_image_loss + torch.mean(
+                    torch.sum(
+                        -teacher_prob * torch.log(global_prob.clamp(min=1e-8)),
+                        dim=1,
+                    )
                 )
 
                 if self.query_num > 1:
