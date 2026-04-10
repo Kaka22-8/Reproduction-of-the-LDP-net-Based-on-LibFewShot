@@ -163,35 +163,35 @@ class LDPNet(MetricModel):
             acc_list.append(accuracy(output, query_target[epi]))
             output_list.append(output)
 
-            global_prob = F.softmax(output, dim=-1).detach()
-
-            global_prob_4d = global_prob.view(way_num, self.query_num,way_num)
-            if self.query_num > 1:
-                cross_global_prob_4d = (
-                    global_prob_4d.sum(dim=1,keepdim=True)-global_prob_4d
-                ) / (self.query_num-1)
-            else:
-                cross_global_prob_4d = global_prob_4d
-
-            cross_global_prob = cross_global_prob_4d.view(
-                way_num *self.query_num,way_num
-            )
+            global_log_prob = F.log_softmax(output, dim=-1)
 
             for local_feat in local_feat_list:
-                local_query_feat = local_feat[epi, :, self.shot_num :, :].contiguous().view(
+                local_query_feat = local_feat[epi, :, self.shot_num:, :].contiguous().view(
                     way_num * self.query_num, -1
                 )
-                local_output = self.proto_head(proto, local_query_feat)
-                local_log_prob = F.log_softmax(local_output, dim=-1)
+                teacher_output = self.proto_head(proto, local_query_feat)
+                teacher_prob = F.softmax(teacher_output, dim=-1).detach()
+
+                teacher_prob_4d = teacher_prob.view(way_num, self.query_num, way_num)
+                if self.query_num > 1:
+                    cross_teacher_prob_4d = (
+                                                    teacher_prob_4d.sum(dim=1, keepdim=True) - teacher_prob_4d
+                                            ) / (self.query_num - 1)
+                else:
+                    cross_teacher_prob_4d = teacher_prob_4d
+
+                cross_teacher_prob = cross_teacher_prob_4d.view(
+                    way_num * self.query_num, way_num
+                )
 
                 self_image_loss = self_image_loss + F.kl_div(
-                    local_log_prob,
-                    global_prob,
+                    global_log_prob,
+                    teacher_prob,
                     reduction="batchmean",
                 )
                 cross_image_loss = cross_image_loss + F.kl_div(
-                    local_log_prob,
-                    cross_global_prob,
+                    global_log_prob,
+                    cross_teacher_prob,
                     reduction="batchmean",
                 )
 
