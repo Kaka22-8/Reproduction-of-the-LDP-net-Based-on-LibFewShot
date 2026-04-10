@@ -173,25 +173,34 @@ class LDPNet(MetricModel):
                 teacher_prob = F.softmax(teacher_output, dim=-1).detach()
 
                 teacher_prob_4d = teacher_prob.view(way_num, self.query_num, way_num)
-                if self.query_num > 1:
-                    cross_teacher_prob_4d = (
-                                                    teacher_prob_4d.sum(dim=1, keepdim=True) - teacher_prob_4d
-                                            ) / (self.query_num - 1)
-                else:
-                    cross_teacher_prob_4d = teacher_prob_4d
-
-                cross_teacher_prob = cross_teacher_prob_4d.view(
-                    way_num * self.query_num, way_num
-                )
 
                 self_image_loss = self_image_loss + F.kl_div(
                     global_log_prob,
                     teacher_prob,
                     reduction="batchmean",
                 )
+
+                if self.query_num > 1:
+                    rand_idx = torch.randint(
+                        low=0,
+                        high=self.query_num,
+                        size=(way_num,),
+                        device=self.device,
+                    )
+                    sampled_teacher_prob = teacher_prob_4d[
+                        torch.arange(way_num, device=self.device),
+                        rand_idx,
+                    ]  # [way_num, way_num]
+
+                    sampled_teacher_prob = sampled_teacher_prob.unsqueeze(1).repeat(
+                        1, self.query_num, 1
+                    ).view(way_num * self.query_num, way_num)
+                else:
+                    sampled_teacher_prob = teacher_prob
+
                 cross_image_loss = cross_image_loss + F.kl_div(
                     global_log_prob,
-                    cross_teacher_prob,
+                    sampled_teacher_prob.detach(),
                     reduction="batchmean",
                 )
 

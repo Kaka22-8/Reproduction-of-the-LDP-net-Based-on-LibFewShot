@@ -9,9 +9,9 @@ from core.config import Config
 from core import Test
 
 
-PATH = "./results/LDPNet-miniImageNet--ravi-resnet10-5-5-Apr-09-2026-19-44-55"
+PATH = "./results/LDPNet-miniImageNet--ravi-resnet10-5-5-Apr-10-2026-14-01-46"
 VAR_DICT = {
-    "data_root": "D:\datasets\StanfordCar",
+    "data_root": "D:\datasets\CUB_200_2011_FewShot",
     "image_size": 224,
     "augment": False,
     "augment_times": 1,

@@ -250,6 +250,19 @@ class LDPFewShotCollateFunction(object):
 
         color_transform = [get_color_distortion(),PILRandomGaussianBlur()]
 
+        self.global_transform = [
+            transforms.Compose(
+                [
+                    transforms.RandomResizedCrop(224,scale=(0.14,1.0)),
+                    transforms.RandomHorizontalFlip(p=0.5),
+                    transforms.Compose(color_transform),
+                    transforms.ToTensor(),
+                    transforms.Normalize(mean=mean, std=std),
+                ]
+            )
+            for _ in range(2)
+        ]
+
         self.local_transforms = [
             transforms.Compose(
                 [
@@ -283,6 +296,19 @@ class LDPFewShotCollateFunction(object):
             episode_size, self.way_num, self.shot_num + self.query_num
         )
 
+        global_views=[]
+        for trans in self.global_transform:
+            view = [trans(img) for img in images]
+            view = torch.stack(view).view(
+                episode_size,
+                self.way_num,
+                self.shot_num + self.query_num,
+                3,
+                224,
+                224
+            )
+            global_views.append(view)
+
         local_views = []
         for trans in self.local_transforms:
             view = [trans(img) for img in images]
@@ -297,6 +323,7 @@ class LDPFewShotCollateFunction(object):
         )
 
         batch_views = {
+            "global_views": global_views,
             "local_views": local_views,
             "raw_images": raw_images,
         }
