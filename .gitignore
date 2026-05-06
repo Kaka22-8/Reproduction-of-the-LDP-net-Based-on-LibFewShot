@@ -135,3 +135,10 @@ dmypy.json
 .idea/
 .vscode/
 results/
+
+# local experiment artifacts
+pretrain/*.pth
+*.pt
+*.ckpt
+build_places_csv.py
+test_resnet10_load.py

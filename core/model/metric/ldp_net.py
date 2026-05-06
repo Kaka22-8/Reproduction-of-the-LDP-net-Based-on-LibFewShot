@@ -62,7 +62,7 @@ class LDPNet(MetricModel):
 
     def train(self, mode=True):
         super(LDPNet,self).train(mode)
-        self.local_branch.train(False)
+        self.local_branch.train(mode)
         return self
 
     def set_forward(self,batch):
@@ -111,15 +111,31 @@ class LDPNet(MetricModel):
 
     def set_forward_loss(self, batch):
         """
-        LDP-Net training path:
-        - raw/global branch provides support prototypes and query predictions
-        - EMA local branch provides local-view teacher targets
-        - losses: ce + lambda1 * self-image + lambda2 * cross-image
+        Official-style LDP-Net training path:
+        - raw/global branch provides support/query anchor features
+        - EMA branch provides local crop features
+        - anchor and local queries are concatenated before one proto-head forward
         """
-        batch_views, global_labels = batch
+        if (
+            isinstance(batch, (list, tuple))
+            and len(batch) == 2
+            and isinstance(batch[0], dict)
+        ):
+            batch_views, global_labels = batch
+            raw_images = batch_views["raw_images"].to(self.device)
+            local_views = [view.to(self.device) for view in batch_views["local_views"]]
+        else:
+            # Official-style per-class sub-dataloader path:
+            # batch = [global1, global2, local1..local6, raw]
+            assert isinstance(batch, (list, tuple)) and len(batch) >= 9
+            raw_images = batch[8].to(self.device)
+            local_views = [view.to(self.device) for view in batch[2:8]]
 
-        raw_images = batch_views["raw_images"].to(self.device)
-        local_views = [view.to(self.device) for view in batch_views["local_views"]]
+            if raw_images.dim() == 5:
+                raw_images = raw_images.unsqueeze(0)
+            local_views = [
+                view.unsqueeze(0) if view.dim() == 5 else view for view in local_views
+            ]
 
         episode_size, way_num, total_num, c, h, w = raw_images.size()
         assert way_num == self.way_num
@@ -141,7 +157,7 @@ class LDPNet(MetricModel):
         output_list = []
         acc_list = []
 
-        # Precompute local teacher features once for all local views.
+        # Local queries come from the EMA branch in the released official code.
         with torch.no_grad():
             local_feat_list = []
             for local_view in local_views:
@@ -150,67 +166,92 @@ class LDPNet(MetricModel):
                 local_feat_list.append(local_feat)
 
         for epi in range(episode_size):
-            support_feat = raw_feat[epi, :, : self.shot_num, :]
-            query_feat = raw_feat[epi, :, self.shot_num :, :]
+            support_anchor = raw_feat[epi, :, : self.shot_num, :]
+            query_anchor = raw_feat[epi, :, self.shot_num :, :]
 
-            proto = support_feat.mean(dim=1)
-            query_feat_flat = query_feat.contiguous().view(
+            proto = support_anchor.mean(dim=1)
+            query_anchor = query_anchor.contiguous().view(
                 way_num * self.query_num, -1
-            )
+            ).unsqueeze(0)
 
-            output = self.proto_head(proto, query_feat_flat)
-            ce_loss = ce_loss + self.loss_func(output, query_target[epi])
-            acc_list.append(accuracy(output, query_target[epi]))
-            output_list.append(output)
-
-            global_log_prob = F.log_softmax(output, dim=-1)
-
+            local_query_all = []
             for local_feat in local_feat_list:
-                local_query_feat = local_feat[epi, :, self.shot_num:, :].contiguous().view(
+                local_query = local_feat[epi, :, self.shot_num :, :].contiguous().view(
                     way_num * self.query_num, -1
                 )
-                teacher_output = self.proto_head(proto, local_query_feat)
-                teacher_prob = F.softmax(teacher_output, dim=-1).detach()
+                local_query_all.append(local_query)
+            local_query_all = torch.stack(local_query_all, dim=0)
 
-                teacher_prob_4d = teacher_prob.view(way_num, self.query_num, way_num)
+            query_set = torch.cat((query_anchor, local_query_all), dim=0)
+            query_set = query_set.contiguous().view(
+                (1 + len(local_views)) * way_num * self.query_num, -1
+            )
 
-                global_prob = F.softmax(output, dim=-1)
+            pred_query_set = self.proto_head(proto, query_set)
+            pred_query_set = pred_query_set.contiguous().view(
+                1 + len(local_views), way_num * self.query_num, way_num
+            )
 
-                self_image_loss = self_image_loss + torch.mean(
-                    torch.sum(
-                        -teacher_prob * torch.log(global_prob.clamp(min=1e-8)),
-                        dim=1,
-                    )
+            pred_query_set_anchor = pred_query_set[0]
+            pred_query_set_aug = pred_query_set[1:]
+
+            ce_loss = ce_loss + self.loss_func(pred_query_set_anchor, query_target[epi])
+            acc_list.append(accuracy(pred_query_set_anchor, query_target[epi]))
+            output_list.append(pred_query_set_anchor)
+
+            pred_query_set_anchor_prob = F.softmax(pred_query_set_anchor, dim=-1)
+            pred_query_set_aug_prob = F.softmax(
+                pred_query_set_aug.contiguous().view(
+                    len(local_views) * way_num * self.query_num, way_num
+                ),
+                dim=-1,
+            )
+
+            pred_query_set_global = pred_query_set_anchor_prob.unsqueeze(0).repeat(
+                len(local_views), 1, 1
+            ).view(len(local_views) * way_num * self.query_num, way_num)
+
+            self_image_loss = self_image_loss + torch.mean(
+                torch.sum(
+                    -pred_query_set_global
+                    * torch.log(pred_query_set_aug_prob.clamp(min=1e-8)),
+                    dim=1,
                 )
+            )
 
-                if self.query_num > 1:
-                    rand_idx = torch.randint(
-                        low=0,
-                        high=self.query_num,
-                        size=(way_num,),
-                        device=self.device,
-                    )
-                    sampled_teacher_prob = teacher_prob_4d[
-                        torch.arange(way_num, device=self.device),
-                        rand_idx,
-                    ]  # [way_num, way_num]
+            pred_query_set_global = pred_query_set_anchor.view(
+                way_num, self.query_num, way_num
+            )
+            rand_id_global = torch.randperm(self.query_num, device=self.device)[0]
+            pred_query_set_global = pred_query_set_global[:, rand_id_global, :]
+            pred_query_set_global = F.softmax(pred_query_set_global, dim=-1)
+            pred_query_set_global = pred_query_set_global.unsqueeze(0).expand(
+                len(local_views), way_num, way_num
+            )
+            pred_query_set_global = pred_query_set_global.contiguous().view(
+                len(local_views) * way_num, way_num
+            )
 
-                    sampled_teacher_prob = sampled_teacher_prob.unsqueeze(1).repeat(
-                        1, self.query_num, 1
-                    ).view(way_num * self.query_num, way_num)
-                else:
-                    sampled_teacher_prob = teacher_prob
+            rand_id_local = torch.randperm(self.query_num, device=self.device)[0]
+            pred_query_set_local = pred_query_set_aug_prob.view(
+                len(local_views), way_num, self.query_num, way_num
+            )
+            pred_query_set_local = pred_query_set_local[:, :, rand_id_local, :]
+            pred_query_set_local = pred_query_set_local.contiguous().view(
+                len(local_views) * way_num, way_num
+            )
 
-                cross_image_loss = cross_image_loss + F.kl_div(
-                    global_log_prob,
-                    sampled_teacher_prob.detach(),
-                    reduction="batchmean",
+            cross_image_loss = cross_image_loss + torch.mean(
+                torch.sum(
+                    -pred_query_set_global
+                    * torch.log(pred_query_set_local.clamp(min=1e-8)),
+                    dim=1,
                 )
+            )
 
         ce_loss = ce_loss / episode_size
-        denom = episode_size * len(local_views)
-        self_image_loss = self_image_loss / denom
-        cross_image_loss = cross_image_loss / denom
+        self_image_loss = self_image_loss / episode_size
+        cross_image_loss = cross_image_loss / episode_size
 
         loss = (
             ce_loss

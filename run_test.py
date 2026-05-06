@@ -9,9 +9,13 @@ from core.config import Config
 from core import Test
 
 
-PATH = "./results/LDPNet-miniImageNet--ravi-resnet10-5-5-Apr-10-2026-16-29-52"
+# Path to a trained experiment directory that contains:
+# - config.yaml
+# - checkpoints/model_best.pth
+PATH = "./results/YOUR_LDPNET_EXPERIMENT_DIR"
 VAR_DICT = {
-    "data_root": "D:\datasets\CUB_200_2011_FewShot",
+    # target-domain test dataset root
+    "data_root": "D:/datasets/CUB_200_2011_FewShot",
     "image_size": 224,
     "augment": False,
     "augment_times": 1,

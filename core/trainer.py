@@ -472,6 +472,14 @@ class Trainer(object):
                 print("Missing keys:{}".format(msg.missing_keys), level="warning")
             if len(msg.unexpected_keys) != 0:
                 print("Unexpected keys:{}".format(msg.unexpected_keys), level="warning")
+
+            # Keep LDPNet EMA branch initialization aligned with emb_func pretrain weights.
+            if (
+                self.config["classifier"]["name"] == "LDPNet"
+                and not self.config["resume"]
+                and hasattr(model, "local_branch")
+            ):
+                model.local_branch.load_state_dict(model.emb_func.state_dict(), strict=True)
         if (
             "fgfl_init_weights" in self.config
             and self.config["fgfl_init_weights"] is not None
