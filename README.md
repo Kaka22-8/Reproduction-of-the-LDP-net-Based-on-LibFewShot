@@ -36,3 +36,5 @@ conda activate libfewshot
 ```bash
 pip install -r requirements.txt 
 ```
+
+### 1.2 下载数据集与预训练模型
