@@ -121,7 +121,7 @@ python run_test.py
 
 ![](Figures/ldpnet-cross-domain-results.png)
 
-![](FIgures/ldpnet-cub-shot-results.png)
+![](Figures/ldpnet-cub-shot-results.png)
 
 ## 项目结构
 
