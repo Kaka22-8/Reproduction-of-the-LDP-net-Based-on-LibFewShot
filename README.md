@@ -115,25 +115,11 @@ python run_test.py
 - Test episodes: 600
 - Evaluation: cross-domain few-shot classification
 
-## 当前结果
+## 复现结果
 
-最终提交主结果使用实验目录：
-
-```text
-LibFewShot/results/LDPNet-miniImageNet--ravi-resnet10-5-5-Apr-15-2026-10-01-59
-```
-
-| Train Dataset | Test Dataset | Setting | Accuracy |
-|---|---|---|---:|
-| miniImageNet | CUB | 5-way 1-shot | 49.496% |
-| miniImageNet | Places365 | 5-way 1-shot | 53.129% |
-| miniImageNet | StanfordCar | 5-way 1-shot | 34.412% |
-
-补充结果：
-
-| Train Dataset | Test Dataset | Setting | Accuracy |
-|---|---|---|---:|
-| miniImageNet | CUB | 5-way 5-shot | 69.173% |
+复现结果如下：
+![](Figures/ldpnet-cross-domain-results.png)
+![](FIgures/ldpnet-cub-shot-results.png)
 
 ## 项目结构
 
