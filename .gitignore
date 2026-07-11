@@ -1,6 +1,6 @@
 .idea/
 .vscode/
-pretrain/
-results/
+/pretrain/
+/results/
 build_places_csv.py
 test_resnet10_load.py

@@ -134,10 +134,14 @@ dmypy.json
 # IDE
 .idea/
 .vscode/
-results/
 
 # local experiment artifacts
+results/*
+!results/README.md
 pretrain/*.pth
+pretrain/*.tar
+pretrain/*.pt
+pretrain/*.ckpt
 *.pt
 *.ckpt
 build_places_csv.py
